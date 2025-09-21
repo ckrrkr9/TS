@@ -25,7 +25,7 @@ jobs:
 
       # ✅ 루트를 가리키도록 변경
       - name: Run local action
-        uses: ./
+        uses: uses: mooyoul/melon-ticket-actions@v1.1.0
         with:
           product-id: ${{ github.event.inputs.product-id }}
           schedule-id: ${{ github.event.inputs.schedule-id }}
