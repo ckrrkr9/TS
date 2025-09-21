@@ -22,16 +22,18 @@ const qs = require("querystring");
   const message = core.getInput("message") || "티켓사세요";
   const webhook = new IncomingWebhook(webhookUrl);
 
+  // ---- 환경변수로 전달된 세션 쿠키 (GitHub Secrets → MELON_COOKIE) ----
+  const cookie = process.env.MELON_COOKIE || "";
+
   // ---- 멜론 좌석 상태 조회 ----
   const payload = qs.stringify({
     prodId: productId,
     scheduleNo: scheduleId,
-    seatId,
+    seatId,                  // 등급/좌석 코드 (예: ST0001, R001, 1_0 등)
     volume: 1,
     selectedGradeVolume: 1,
   });
 
-  // 멜론이 요구하는 브라우저스러운 헤더들 (406 방지)
   const headers = {
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "ko-KR,ko;q=0.9",
@@ -44,6 +46,7 @@ const qs = require("querystring");
     "Connection": "keep-alive",
     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
     "X-Requested-With": "XMLHttpRequest",
+    ...(cookie ? { "Cookie": cookie } : {}), // ✅ Secrets에 MELON_COOKIE 있으면 자동으로 헤더 추가
   };
 
   const res = await axios({
@@ -53,13 +56,11 @@ const qs = require("querystring");
     data: payload,
     headers,
     timeout: 15000,
-    // 상태코드가 200이 아니어도 일단 반환받아 우리가 처리
     validateStatus: () => true,
   });
 
   console.log("Seat API status:", res.status);
   if (res.status !== 200) {
-    // 본문 앞부분도 찍어서 디버그 도움
     const bodySnippet =
       typeof res.data === "string"
         ? res.data.slice(0, 300)
