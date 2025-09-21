@@ -1,0 +1,37 @@
+name: Melon Ticket Notifier
+
+on:
+  workflow_dispatch:   # 수동 실행 버튼
+    inputs:
+      product-id:
+        description: "Melon Product ID (예: 204755)"
+        required: true
+      schedule-id:
+        description: "Schedule ID"
+        required: true
+      seat-id:
+        description: "Seat ID (예: 1_0)"
+        required: true
+      message:
+        description: "Slack message"
+        required: false
+        default: "티켓사세요"
+  # 필요하면 주석 해제하고 주기 실행
+  # schedule:
+  #   - cron: "*/10 * * * *"  # 10분마다(UTC)
+
+jobs:
+  check-ticket:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 중요: 코드가 하위 폴더(melon-ticket-actions-master)에 있어서 uses 경로를 그 폴더로 설정
+      - name: Run action from subfolder
+        uses: ./melon-ticket-actions-master
+        with:
+          product-id: ${{ github.event.inputs.product-id }}
+          schedule-id: ${{ github.event.inputs.schedule-id }}
+          seat-id: ${{ github.event.inputs.seat-id }}
+          slack-incoming-webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          message: ${{ github.event.inputs.message }}
