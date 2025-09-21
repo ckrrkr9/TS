@@ -6,30 +6,48 @@ const { IncomingWebhook } = require("@slack/webhook");
 const axios = require("axios").default || require("axios");
 const qs = require("querystring");
 
+function normalizeCookie(raw) {
+  if (!raw) return "";
+  let s = String(raw);
+
+  // 앞뒤 공백 + 개행 제거
+  s = s.trim().replace(/[\r\n]+/g, "");
+
+  // 'Cookie:' 라벨을 실수로 붙여넣은 경우 제거
+  s = s.replace(/^cookie\s*:\s*/i, "");
+
+  // 양끝 따옴표/대괄호 제거
+  s = s.replace(/^["'\[]+/, "").replace(/["'\]]+$/, "");
+
+  // 세미콜론 뒤 공백 표준화
+  s = s.replace(/;\s*/g, "; ").replace(/\s{2,}/g, " ");
+
+  // 헤더에 허용되지 않는 비ASCII 문자 제거(보이지 않는 NBSP 등)
+  s = s.replace(/[^\x20-\x7E]+/g, "");
+  return s;
+}
+
 (async () => {
-  // ---- 입력값 검증 ----
   const [productId, scheduleId, seatId, webhookUrl] = [
     "product-id",
     "schedule-id",
     "seat-id",
     "slack-incoming-webhook-url",
   ].map((name) => {
-    const value = core.getInput(name);
-    if (!value) throw new Error(`melon-ticket-actions: Please set ${name} input parameter`);
-    return value;
+    const v = core.getInput(name);
+    if (!v) throw new Error(`melon-ticket-actions: Please set ${name} input parameter`);
+    return v;
   });
 
   const message = core.getInput("message") || "티켓사세요";
   const webhook = new IncomingWebhook(webhookUrl);
 
-  // ---- 환경변수로 전달된 세션 쿠키 (GitHub Secrets → MELON_COOKIE) ----
-  const cookie = process.env.MELON_COOKIE || "";
+  const cookie = normalizeCookie(process.env.MELON_COOKIE || "");
 
-  // ---- 멜론 좌석 상태 조회 ----
   const payload = qs.stringify({
     prodId: productId,
     scheduleNo: scheduleId,
-    seatId,                  // 등급/좌석 코드 (예: ST0001, R001, 1_0 등)
+    seatId,
     volume: 1,
     selectedGradeVolume: 1,
   });
@@ -46,7 +64,7 @@ const qs = require("querystring");
     "Connection": "keep-alive",
     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
     "X-Requested-With": "XMLHttpRequest",
-    ...(cookie ? { "Cookie": cookie } : {}), // ✅ Secrets에 MELON_COOKIE 있으면 자동으로 헤더 추가
+    ...(cookie ? { Cookie: cookie } : {}),
   };
 
   const res = await axios({
@@ -62,22 +80,12 @@ const qs = require("querystring");
   console.log("Seat API status:", res.status);
   if (res.status !== 200) {
     const bodySnippet =
-      typeof res.data === "string"
-        ? res.data.slice(0, 300)
-        : JSON.stringify(res.data).slice(0, 300);
+      typeof res.data === "string" ? res.data.slice(0, 300) : JSON.stringify(res.data).slice(0, 300);
     throw new Error(`Seat API HTTP ${res.status}. Body: ${bodySnippet}`);
   }
 
-  console.log(
-    "Got response:",
-    typeof res.data === "string" ? res.data.slice(0, 300) : JSON.stringify(res.data).slice(0, 300)
-  );
-
-  // ---- 좌석 가능 시 Slack 알림 ----
   if (res.data && res.data.chkResult) {
-    const link = `https://ticket.melon.com/performance/index.htm?${qs.stringify({
-      prodId: productId,
-    })}`;
+    const link = `https://ticket.melon.com/performance/index.htm?${qs.stringify({ prodId: productId })}`;
     await webhook.send(`${message} ${link}`);
     console.log("Slack sent");
   } else {
