@@ -10,7 +10,7 @@ on:
         description: "Schedule ID"
         required: true
       seat-id:
-        description: "Seat ID (예: 1_0)"
+        description: "Seat ID (예: ST0001 / R001 / 1_0 등)"
         required: true
       message:
         description: "Slack message"
@@ -23,9 +23,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ✅ 루트를 가리키도록 변경
+      # ✅ 내 리포의 패치된 코드 실행 (업스트림 X)
       - name: Run local action
-        uses: mooyoul/melon-ticket-actions@v1.1.0
+        uses: ./
+        env:
+          # ✅ GitHub Secrets 에 저장한 쿠키를 ENV 로 전달
+          MELON_COOKIE: ${{ secrets.MELON_COOKIE }}
         with:
           product-id: ${{ github.event.inputs.product-id }}
           schedule-id: ${{ github.event.inputs.schedule-id }}
@@ -33,7 +36,9 @@ jobs:
           slack-incoming-webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
           message: ${{ github.event.inputs.message }}
 
-      # (디버그용) 문제 생기면 주석 해제해 파일 구조 확인
-      # - run: |
-      #     pwd
-      #     ls -la
+      # (선택) 디버그: 쿠키가 전달됐는지 길이만 출력
+      # - name: Debug cookie presence
+      #   run: |
+      #     echo "MELON_COOKIE length: ${#MELON_COOKIE}"
+      #   env:
+      #     MELON_COOKIE: ${{ secrets.MELON_COOKIE }}
