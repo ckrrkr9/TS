@@ -9,21 +9,11 @@ const qs = require("querystring");
 function normalizeCookie(raw) {
   if (!raw) return "";
   let s = String(raw);
-
-  // 앞뒤 공백 + 개행 제거
-  s = s.trim().replace(/[\r\n]+/g, "");
-
-  // 'Cookie:' 라벨을 실수로 붙여넣은 경우 제거
-  s = s.replace(/^cookie\s*:\s*/i, "");
-
-  // 양끝 따옴표/대괄호 제거
-  s = s.replace(/^["'\[]+/, "").replace(/["'\]]+$/, "");
-
-  // 세미콜론 뒤 공백 표준화
-  s = s.replace(/;\s*/g, "; ").replace(/\s{2,}/g, " ");
-
-  // 헤더에 허용되지 않는 비ASCII 문자 제거(보이지 않는 NBSP 등)
-  s = s.replace(/[^\x20-\x7E]+/g, "");
+  s = s.trim().replace(/[\r\n]+/g, "");            // 개행 제거
+  s = s.replace(/^cookie\s*:\s*/i, "");            // 'Cookie:' 라벨 제거
+  s = s.replace(/^["'\[]+/, "").replace(/["'\]]+$/, ""); // 감싸는 따옴표/대괄호 제거
+  s = s.replace(/;\s*/g, "; ").replace(/\s{2,}/g, " ");  // 공백 정리
+  s = s.replace(/[^\x20-\x7E]+/g, "");             // 비ASCII 제거
   return s;
 }
 
@@ -42,28 +32,41 @@ function normalizeCookie(raw) {
   const message = core.getInput("message") || "티켓사세요";
   const webhook = new IncomingWebhook(webhookUrl);
 
+  // 시크릿에서 가져온 쿠키
   const cookie = normalizeCookie(process.env.MELON_COOKIE || "");
+
+  // 좌석 팝업(onestop) URL을 기본 Referer로 사용 (필요 시 환경변수로 덮어쓰기 가능)
+  const popupReferer =
+    process.env.MELON_REFERER ||
+    `https://ticket.melon.com/reservation/popup/onestop.htm?prodId=${encodeURIComponent(
+      productId
+    )}&scheduleNo=${encodeURIComponent(scheduleId)}`;
 
   const payload = qs.stringify({
     prodId: productId,
     scheduleNo: scheduleId,
-    seatId,
+    seatId,                    // 예: ST0001 / R001 / 1_0 등
     volume: 1,
     selectedGradeVolume: 1,
   });
 
   const headers = {
-    "Accept": "application/json, text/plain, */*",
+    Accept: "application/json, text/plain, */*",
     "Accept-Language": "ko-KR,ko;q=0.9",
     "Cache-Control": "no-cache",
-    "Pragma": "no-cache",
-    "Origin": "https://ticket.melon.com",
-    "Referer": `https://ticket.melon.com/performance/index.htm?prodId=${productId}`,
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-    "Host": "ticket.melon.com",
-    "Connection": "keep-alive",
+    Pragma: "no-cache",
+    Origin: "https://ticket.melon.com",
+    Referer: popupReferer,              // 🔑 팝업 페이지로 맞춤
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    Host: "ticket.melon.com",
+    Connection: "keep-alive",
     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
     "X-Requested-With": "XMLHttpRequest",
+    // 브라우저에서 자동으로 붙는 sec-fetch 헤더 유사 값 (엄격하진 않지만 도움됨)
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
     ...(cookie ? { Cookie: cookie } : {}),
   };
 
@@ -80,12 +83,17 @@ function normalizeCookie(raw) {
   console.log("Seat API status:", res.status);
   if (res.status !== 200) {
     const bodySnippet =
-      typeof res.data === "string" ? res.data.slice(0, 300) : JSON.stringify(res.data).slice(0, 300);
+      typeof res.data === "string"
+        ? res.data.slice(0, 300)
+        : JSON.stringify(res.data).slice(0, 300);
     throw new Error(`Seat API HTTP ${res.status}. Body: ${bodySnippet}`);
   }
 
+  // 좌석 가능 시 Slack 알림
   if (res.data && res.data.chkResult) {
-    const link = `https://ticket.melon.com/performance/index.htm?${qs.stringify({ prodId: productId })}`;
+    const link = `https://ticket.melon.com/performance/index.htm?${qs.stringify({
+      prodId: productId,
+    })}`;
     await webhook.send(`${message} ${link}`);
     console.log("Slack sent");
   } else {
