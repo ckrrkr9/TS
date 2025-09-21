@@ -28,7 +28,7 @@ jobs:
 
       # 중요: 코드가 하위 폴더(melon-ticket-actions-master)에 있어서 uses 경로를 그 폴더로 설정
       - name: Run action from subfolder
-        uses: ./melon-ticket-actions-master
+        uses: ./melon-ticket-actions-master/melon-ticket-actions-master
         with:
           product-id: ${{ github.event.inputs.product-id }}
           schedule-id: ${{ github.event.inputs.schedule-id }}
